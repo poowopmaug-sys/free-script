@@ -1,0 +1,732 @@
+-- Infectious Smile - Absolute Anti-Gravity Fly System (Zero-Sink Guarantee)
+ 
+-- ลบระบบป้องกันการโกงเมื่อเริ่มต้น
+if workspace.Map:FindFirstChild("AntiHack") then
+    workspace.Map.AntiHack:Destroy()
+end
+ 
+local plr = game.Players.LocalPlayer
+if plr.Character then
+    if plr.Character:FindFirstChild("StayOnPart") then plr.Character.StayOnPart:Destroy() end
+    if plr.Character:FindFirstChild("HumanoidInit") then plr.Character.HumanoidInit:Destroy() end
+end
+ 
+-- โหลด Rayfield Library
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+ 
+local Window = Rayfield:CreateWindow({
+    Name = "รอยยิ้มที่ติดเชื้อ",
+    LoadingTitle = "รอยยิ้มที่ติดเชื้อ",
+    LoadingSubtitle = "เล่นให้สนุกนะ 🥰",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+-- ฟังก์ชั่นดึงอาวุธทั้งหมด
+local function getAllTools()
+    local tools = {}
+    if plr.Character then
+        for _, item in plr.Character:GetChildren() do
+            if item:IsA("Tool") then table.insert(tools, item) end
+        end
+    end
+    for _, item in plr.Backpack:GetChildren() do
+        if item:IsA("Tool") then table.insert(tools, item) end
+    end
+    return tools
+end
+
+---------------------------------------------------------
+-- แท็บ การบิน / เคลื่อนที่ (Absolute Zero-Sink Anti-Gravity Fly)
+---------------------------------------------------------
+local FlyTab = Window:CreateTab("การบิน / เคลื่อนที่", 4483362458)
+
+local flyingMaster = false  -- สวิตช์หลักจาก UI ด้านใน
+local flyActive = false      -- สถานะการบินจริง
+local flySpeed = 50
+local flyConnection = nil
+
+local bv = nil
+local bg = nil
+
+-- ตัวแปรปุ่มบินลอยด้านนอก (External Fly Button)
+local flyBtnGui = nil
+local externalFlyBtn = nil
+
+-- ฟังก์ชั่นลบปุ่มบินลอยด้านนอก
+local function destroyExternalFlyBtn()
+    if flyBtnGui then
+        flyBtnGui:Destroy()
+        flyBtnGui = nil
+        externalFlyBtn = nil
+    end
+end
+
+-- ฟังก์ชั่นหยุดการบิน
+local function stopFlyingProcess()
+    flyActive = false
+    if flyConnection then flyConnection:Disconnect() flyConnection = nil end
+    if bv then bv:Destroy() bv = nil end
+    if bg then bg:Destroy() bg = nil end
+    
+    if plr.Character then
+        local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false end
+        
+        local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.Velocity = Vector3.zero
+            hrp.RotVelocity = Vector3.zero
+        end
+    end
+end
+
+-- ฟังก์ชั่นเริ่มการบินต้านแรงโน้มถ่วง 100% (นิ่งสนิท ไม่ตก ไม่ไหล)
+local function startFlyingProcess()
+    stopFlyingProcess()
+    flyActive = true
+
+    local char = plr.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = char.HumanoidRootPart
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local camera = workspace.CurrentCamera
+
+    if hum then hum.PlatformStand = true end
+
+    -- ตัวสร้างแรงต้าน Gravity 100% ล็อกแกน Y ไม่ให้ไหลตกเด็ดขาด
+    bv = Instance.new("BodyVelocity")
+    bv.Name = "AntiGravityFlyBV"
+    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.Velocity = Vector3.zero
+    bv.Parent = hrp
+
+    bg = Instance.new("BodyGyro")
+    bg.Name = "AntiGravityFlyBG"
+    bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    bg.P = 9e4
+    bg.CFrame = camera.CFrame
+    bg.Parent = hrp
+
+    flyConnection = game:GetService("RunService").RenderStepped:Connect(function()
+        if not flyActive or not hrp or not hrp.Parent then
+            stopFlyingProcess()
+            return
+        end
+
+        bg.CFrame = camera.CFrame
+
+        local moveDir = hum and hum.MoveDirection or Vector3.zero
+
+        if moveDir.Magnitude > 0 then
+            local camCF = camera.CFrame
+            local localMove = camCF:VectorToObjectSpace(moveDir)
+            local flyVector = (camCF.LookVector * -localMove.Z) + (camCF.RightVector * localMove.X)
+
+            if flyVector.Magnitude > 0 then
+                bv.Velocity = flyVector.Unit * flySpeed
+            else
+                bv.Velocity = Vector3.zero
+            end
+        else
+            -- ล็อกนิ่งสนิท แรง Y = 0 ป้องกันการตก 100%
+            bv.Velocity = Vector3.zero
+        end
+    end)
+end
+
+-- ฟังก์ชั่นสร้างปุ่มบินลอยด้านนอก (External Fly Button)
+local function createExternalFlyBtn()
+    destroyExternalFlyBtn()
+
+    flyBtnGui = Instance.new("ScreenGui")
+    flyBtnGui.Name = "ExternalFlyGui"
+    flyBtnGui.ResetOnSpawn = false
+    
+    if game:GetService("CoreGui"):FindFirstChild("ExternalFlyGui") then
+        game:GetService("CoreGui").ExternalFlyGui:Destroy()
+    end
+    flyBtnGui.Parent = game:GetService("CoreGui")
+
+    externalFlyBtn = Instance.new("TextButton")
+    externalFlyBtn.Name = "FlyToggleBtn"
+    externalFlyBtn.Size = UDim2.new(0, 65, 0, 65)
+    externalFlyBtn.Position = UDim2.new(0, 15, 0.5, -30)
+    externalFlyBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50) -- สีแดง = ปิดบินอยู่
+    externalFlyBtn.Text = "FLY: OFF"
+    externalFlyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    externalFlyBtn.Font = Enum.Font.GothamBold
+    externalFlyBtn.TextSize = 13
+    externalFlyBtn.Active = true
+    externalFlyBtn.Draggable = true
+    externalFlyBtn.Parent = flyBtnGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = externalFlyBtn
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 2
+    stroke.Parent = externalFlyBtn
+
+    -- กิจกรรมเมื่อกดปุ่มบินด้านนอก
+    externalFlyBtn.MouseButton1Click:Connect(function()
+        if not flyingMaster then return end
+
+        if flyActive then
+            stopFlyingProcess()
+            externalFlyBtn.Text = "FLY: OFF"
+            externalFlyBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+        else
+            startFlyingProcess()
+            externalFlyBtn.Text = "FLY: ON"
+            externalFlyBtn.BackgroundColor3 = Color3.fromRGB(40, 200, 80)
+        end
+    end)
+end
+
+-- สวิตช์เปิด/ปิดระบบบินจากด้านใน UI
+FlyTab:CreateToggle({
+    Name = "เปิดใช้งานระบบสคริปต์บิน (Master Fly)",
+    CurrentValue = false,
+    Callback = function(v)
+        flyingMaster = v
+        if flyingMaster then
+            createExternalFlyBtn()
+        else
+            stopFlyingProcess()
+            destroyExternalFlyBtn()
+        end
+    end
+})
+
+FlyTab:CreateSlider({
+    Name = "ความเร็วการบิน",
+    Range = {10, 300},
+    Increment = 5,
+    Suffix = " Speed",
+    CurrentValue = 50,
+    Callback = function(Value)
+        flySpeed = Value
+    end
+})
+
+-- แท็บ มนุษย์ (Human)
+local Human = Window:CreateTab("มนุษย์", 4483362458)
+ 
+Human:CreateSection("อาวุธ - คูลดาวน์ & ระยะการโจมตี")
+ 
+Human:CreateDropdown({
+    Name = "ลดคูลดาวน์ทันที - เลือกอาวุธ",
+    Options = {"Bat", "Bottle", "Katana", "Branch", "Spare", "Chain"},
+    CurrentOption = "",
+    Callback = function(choice)
+        local selected = typeof(choice) == "table" and choice[1] or choice
+        for _, tool in getAllTools() do
+            if tool.Name == selected and tool:FindFirstChild("Cooldown") then
+                tool.Cooldown.Value = 0
+            end
+        end
+    end
+})
+ 
+local autoZero = false
+Human:CreateToggle({
+    Name = "ลดคูลดาวน์เป็น 0 อัตโนมัติ",
+    CurrentValue = false,
+    Callback = function(v)
+        autoZero = v
+        task.spawn(function()
+            while autoZero do
+                task.wait()
+                local char = plr.Character
+                if char then
+                    local tool = char:FindFirstChildOfClass("Tool")
+                    if tool and tool:FindFirstChild("Cooldown") then
+                        tool.Cooldown.Value = 0
+                    end
+                end
+            end
+        end)
+    end
+})
+ 
+local autoLegit = false
+Human:CreateToggle({
+    Name = "ลดคูลดาวน์เป็น 0.5 อัตโนมัติ (ดูสมจริง)",
+    CurrentValue = false,
+    Callback = function(v)
+        autoLegit = v
+        task.spawn(function()
+            while autoLegit do
+                task.wait()
+                local char = plr.Character
+                if char then
+                    local tool = char:FindFirstChildOfClass("Tool")
+                    if tool and tool:FindFirstChild("Cooldown") then
+                        tool.Cooldown.Value = 0.5
+                    end
+                end
+            end
+        end)
+    end
+})
+ 
+local killbricksOff = false
+Human:CreateToggle({
+    Name = "ปิดใช้งาน Killbricks (บล็อกฆ่า)",
+    CurrentValue = false,
+    Callback = function(v)
+        killbricksOff = v
+        for _, part in workspace.Map:GetDescendants() do
+            if part:IsA("BasePart") and part:FindFirstChild("TouchInterest") and part.Name:lower():find("kill") then
+                part.CanTouch = not v
+                part.CanQuery = not v
+            end
+        end
+    end
+})
+ 
+local savedReachSize = 10
+ 
+Human:CreateInput({
+    Name = "ระยะการโจมตีของอาวุธ (Reach)",
+    PlaceholderText = "ใส่ตัวเลข (เช่น 15-30) -- 0 = ปิด",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(txt)
+        local num = tonumber(txt)
+        if num and num > 0 then
+            savedReachSize = num
+        elseif num == 0 then
+            savedReachSize = 0
+            return
+        end
+ 
+        for _, tool in getAllTools() do
+            for _, part in tool:GetDescendants() do
+                if part:IsA("BasePart") and part:FindFirstChild("TouchInterest") then
+                    part.Size = Vector3.new(num, num, num)
+                    part.Transparency = 0.7
+                    part.Massless = true
+                    if not part:FindFirstChildOfClass("SelectionBox") then
+                        local box = Instance.new("SelectionBox", part)
+                        box.Adornee = part
+                    end
+                end
+            end
+        end
+    end
+})
+ 
+local autoReachNew = false
+Human:CreateToggle({
+    Name = "เพิ่มระยะโจมตีให้อาวุธใหม่อัตโนมัติ",
+    CurrentValue = false,
+    Callback = function(v)
+        autoReachNew = v
+    end
+})
+ 
+plr.CharacterAdded:Connect(function(char)
+    char.DescendantAdded:Connect(function(obj)
+        if autoReachNew and savedReachSize > 0 and obj:IsA("Tool") then
+            task.wait(0.15)
+            for _, part in obj:GetDescendants() do
+                if part:IsA("BasePart") and part:FindFirstChild("TouchInterest") then
+                    part.Size = Vector3.new(savedReachSize, savedReachSize, savedReachSize)
+                    part.Transparency = 0.7
+                    part.Massless = true
+                    if not part:FindFirstChildOfClass("SelectionBox") then
+                        local box = Instance.new("SelectionBox", part)
+                        box.Adornee = part
+                    end
+                end
+            end
+        end
+    end)
+end)
+ 
+Human:CreateButton({
+    Name = "รับอาวุธหลัก",
+    Callback = function()
+        local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+ 
+        local oldPos = hrp.CFrame
+        local backpack = plr.Backpack
+ 
+        local wName = plr.Marketplace["Main Weapon"].Equipped.Value
+        if wName == "Default" then wName = "Bat" end
+ 
+        repeat task.wait()
+            hrp.CFrame = workspace.Map.HumanBase.Vendor.BatCollection.HitBox.CFrame
+            local detector = workspace.Map.HumanBase.Vendor.BatCollection.ClickDetector
+            detector.MaxActivationDistance = 9e9
+            fireclickdetector(detector)
+        until backpack:FindFirstChild(wName)
+ 
+        task.wait(0.4)
+        repeat task.wait() hrp.CFrame = oldPos until (hrp.Position - oldPos.Position).Magnitude < 3
+    end
+})
+ 
+Human:CreateButton({
+    Name = "รับอาวุธพิเศษทั้งหมด",
+    Callback = function()
+        local collections = {"FirePotionCollection","ShotgunCollection","KnifeCollection","HatchetCollection","RustyShovelCollection","WaterJugCollection","HandgunCollection","ShovelCollection"}
+        for _, obj in workspace.Map.System:GetDescendants() do
+            if obj:IsA("ClickDetector") and table.find(collections, obj.Parent.Name) and not obj.Parent:FindFirstAncestor("Locker") then
+                local name = obj.Parent.Name:gsub("Collection",""):gsub("(%l)(%u)","%1 %2")
+                local old = plr.Character.HumanoidRootPart.CFrame
+                local start = tick()
+                repeat task.wait()
+                    plr.Character.HumanoidRootPart.CFrame = obj.Parent:FindFirstChildWhichIsA("BasePart").CFrame
+                    fireclickdetector(obj)
+                until plr.Backpack:FindFirstChild(name) or tick() - start > 0.8
+                task.wait(0.1)
+                plr.Character.HumanoidRootPart.CFrame = old
+            end
+        end
+    end
+})
+
+Human:CreateButton({
+    Name = "ลบอาวุธที่ถืออยู่",
+    Callback = function()
+        local tool = plr.Character and plr.Character:FindFirstChildOfClass("Tool")
+        if tool then tool:Destroy() end
+    end
+})
+ 
+-- แท็บ ผู้ติดเชื้อ (Infected)
+local Infected = Window:CreateTab("ผู้ติดเชื้อ", 4483362458)
+ 
+Infected:CreateButton({
+    Name = "แพร่เชื้อให้ตัวเอง",
+    Callback = function()
+        local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+        if hrp and workspace.Map.Infectors.Infector and workspace.Map.Infectors.Infector:FindFirstChild("Part") then
+            firetouchinterest(hrp, workspace.Map.Infectors.Infector.Part, 0)
+            task.delay(0.1, function() firetouchinterest(hrp, workspace.Map.Infectors.Infector.Part, 1) end)
+        end
+    end
+})
+ 
+Infected:CreateInput({
+    Name = "ระยะการแพร่เชื้อ (ความยาวแกน Z)",
+    PlaceholderText = "ระยะพุ่งยื่นไปข้างหน้า (แนะนำ 15-50)",
+    Callback = function(val)
+        local n = tonumber(val)
+        if not n then return end
+        local torso = plr.Character and plr.Character:FindFirstChild("Torso")
+        if torso and torso:FindFirstChild("Part") then
+            local p = torso.Part
+            p.Size = Vector3.new(7, 2, n)
+            p.Massless = true
+            p.Transparency = 0.6
+            if not p:FindFirstChild("SelectionBox") then
+                Instance.new("SelectionBox", p).Adornee = p
+            end
+        end
+    end
+})
+ 
+Infected:CreateToggle({
+    Name = "ป้องกันตัวยิ้มสีส้ม (Anti Orange Smilers)",
+    CurrentValue = false,
+    Callback = function(v)
+        for _, p in workspace:GetDescendants() do
+            if p:IsA("BasePart") and p.BrickColor.Name == "Neon orange" then
+                p.CanTouch = not v
+                p.CanQuery = not v
+            end
+        end
+    end
+})
+ 
+Infected:CreateToggle({
+    Name = "ป้องกันวัตถุแพร่เชื้อสีขาว",
+    CurrentValue = false,
+    Callback = function(v)
+        for _, p in workspace:GetDescendants() do
+            if p:IsA("BasePart") and p.BrickColor.Name == "Institutional white" then
+                p.CanTouch = not v
+                p.CanQuery = not v
+            end
+        end
+    end
+})
+ 
+local antiStunRunning = false
+Infected:CreateToggle({
+    Name = "ป้องกันการมึนงง / ล้มลง (Anti Stun / Down)",
+    CurrentValue = false,
+    Callback = function(v)
+        antiStunRunning = v
+        task.spawn(function()
+            while antiStunRunning do
+                task.wait(0.2)
+                pcall(function()
+                    local stats = plr.Character.Stats
+                    if stats.Downed.Value or stats.Ragdoll.Value then
+                        local h = plr.Character.Humanoid
+                        h.WalkSpeed = 20
+                        h:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+                        stats.Downed.Value = false
+                        stats.Ragdoll.Value = false
+                    end
+                end)
+            end
+        end)
+    end
+})
+ 
+Infected:CreateButton({
+    Name = "ลดคูลดาวน์การจับเป็น 0",
+    Callback = function()
+        local inf = plr.Character and plr.Character:FindFirstChild("Infected")
+        if inf and inf:FindFirstChild("Infect") and inf.Infect:FindFirstChild("Cooldown") then
+            inf.Infect.Cooldown.Value = 0
+        end
+    end
+})
+
+-- แท็บ ESP & ระบบวาร์ป (ESP & Teleport)
+local ESPTab = Window:CreateTab("ESP & วาร์ป", 4483362458)
+ 
+local espPlayers = false
+local espColorInfected = Color3.fromRGB(255, 50, 50)
+local espColorHuman = Color3.fromRGB(50, 255, 50)
+ 
+local function applyESP(v)
+    if v == plr then return end
+    if v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+        if not v.Character.HumanoidRootPart:FindFirstChild("HighlightESP") then
+            local hl = Instance.new("Highlight")
+            hl.Name = "HighlightESP"
+            hl.Adornee = v.Character
+            hl.FillTransparency = 0.5
+            hl.OutlineTransparency = 0
+            
+            if v.Character:FindFirstChild("Infected") then
+                hl.FillColor = espColorInfected
+            else
+                hl.FillColor = espColorHuman
+            end
+            
+            hl.Parent = v.Character.HumanoidRootPart
+        end
+    end
+end
+ 
+ESPTab:CreateToggle({
+    Name = "เปิดใช้งาน ESP ผู้เล่น (Highlight)",
+    CurrentValue = false,
+    Callback = function(v)
+        espPlayers = v
+        task.spawn(function()
+            while espPlayers do
+                task.wait(1)
+                for _, player in pairs(game.Players:GetPlayers()) do
+                    applyESP(player)
+                end
+            end
+            if not espPlayers then
+                for _, player in pairs(game.Players:GetPlayers()) do
+                    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        local hl = player.Character.HumanoidRootPart:FindFirstChild("HighlightESP")
+                        if hl then hl:Destroy() end
+                    end
+                end
+            end
+        end)
+    end
+})
+
+ESPTab:CreateSection("วาร์ปไปหาผู้เล่น")
+
+local targetPlayerName = ""
+
+local function getOtherPlayers()
+    local list = {}
+    for _, p in pairs(game.Players:GetPlayers()) do
+        if p ~= plr then
+            table.insert(list, p.Name)
+        end
+    end
+    if #list == 0 then table.insert(list, "ไม่มีผู้เล่นอื่น") end
+    return list
+end
+
+local playerDropdown = ESPTab:CreateDropdown({
+    Name = "เลือกผู้เล่นที่ต้องการวาร์ปไปหา",
+    Options = getOtherPlayers(),
+    CurrentOption = "",
+    Callback = function(choice)
+        if typeof(choice) == "table" then
+            targetPlayerName = choice[1] or ""
+        else
+            targetPlayerName = choice or ""
+        end
+    end
+})
+
+ESPTab:CreateButton({
+    Name = "อัปเดตรายชื่อผู้เล่น",
+    Callback = function()
+        if playerDropdown and playerDropdown.Refresh then
+            playerDropdown:Refresh(getOtherPlayers())
+        end
+    end
+})
+
+ESPTab:CreateButton({
+    Name = "วาร์ปไปหาผู้เล่นที่เลือก (ไม่ดึงกลับ)",
+    Callback = function()
+        if targetPlayerName ~= "" and targetPlayerName ~= "ไม่มีผู้เล่นอื่น" then
+            local targetPlr = game.Players:FindFirstChild(targetPlayerName)
+            if targetPlr and targetPlr.Character and targetPlr.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.CFrame = targetPlr.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+                end
+            end
+        end
+    end
+})
+
+-- แท็บ กิจกรรม / อื่นๆ (Events / Misc)
+local EventsMisc = Window:CreateTab("กิจกรรม / อื่นๆ", 4483362458)
+ 
+EventsMisc:CreateToggle({
+    Name = "เก็บกุญแจให้อัตโนมัติ",
+    CurrentValue = false,
+    Callback = function(v)
+        task.spawn(function()
+            while v do
+                task.wait(0.5)
+                for _, k in workspace.Particles:GetChildren() do
+                    if k:IsA("BasePart") and k.Name:lower():find("key") then
+                        local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then firetouchinterest(hrp, k, 0) task.delay(0.1, function() firetouchinterest(hrp, k, 1) end) end
+                    end
+                end
+            end
+        end)
+    end
+})
+ 
+EventsMisc:CreateToggle({
+    Name = "เก็บ SmileCoins อัตโนมัติ",
+    CurrentValue = false,
+    Callback = function(v)
+        task.spawn(function()
+            while v do
+                task.wait(0.4)
+                for _, c in workspace.Map.System:GetDescendants() do
+                    if c.Name == "SmileCoin" and c:FindFirstChild("TouchInterest") then
+                        local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then pcall(function() firetouchinterest(hrp, c, 0) task.delay(0.1, function() firetouchinterest(hrp, c, 1) end) end) end
+                    end
+                end
+            end
+        end)
+    end
+})
+
+EventsMisc:CreateButton({
+    Name = "ลบประตู/สิ่งกีดขวางในแมพ (Remove Doors)",
+    Callback = function()
+        for _, door in pairs(workspace.Map:GetDescendants()) do
+            if door:IsA("BasePart") and (door.Name:lower():find("door") or door.Name:lower():find("glass")) then
+                door:Destroy()
+            end
+        end
+    end
+})
+ 
+EventsMisc:CreateSection("ภาพและแสง (Visuals)")
+ 
+local fullbrightOn = false
+EventsMisc:CreateToggle({
+    Name = "เปิดความสว่างสูงสุด (Fullbright)",
+    CurrentValue = false,
+    Callback = function(enabled)
+        fullbrightOn = enabled
+        local lighting = game.Lighting
+ 
+        if enabled then
+            lighting.Ambient = Color3.fromRGB(255, 255, 255)
+            lighting.Brightness = 2
+            lighting.FogEnd = 1e10
+ 
+            for _, effect in lighting:GetDescendants() do
+                if effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or 
+                   effect:IsA("ColorCorrectionEffect") or effect:IsA("SunRaysEffect") then
+                    effect.Enabled = false
+                end
+            end
+        else
+            lighting.Ambient = Color3.fromRGB(170, 170, 170)
+            lighting.Brightness = 1
+            lighting.FogEnd = 100000
+        end
+    end
+})
+ 
+EventsMisc:CreateButton({Name = "ลบหมอกออก (No Fog)", Callback = function()
+    local l = game.Lighting
+    l.FogStart = math.huge
+    l.FogEnd = math.huge
+end})
+ 
+EventsMisc:CreateSection("การจัดการสคริปต์")
+ 
+EventsMisc:CreateButton({
+    Name = "สร้างปุ่ม EXIT (ออกจากเกม)",
+    Callback = function()
+        local sg = Instance.new("ScreenGui", game.CoreGui)
+        sg.ResetOnSpawn = false
+ 
+        local b = Instance.new("TextButton", sg)
+        b.Size = UDim2.new(0,140,0,55)
+        b.Position = UDim2.new(1,-160,0,30)
+        b.BackgroundColor3 = Color3.fromRGB(200,0,0)
+        b.Text = "EXIT"
+        b.TextColor3 = Color3.new(1,1,1)
+        b.Font = Enum.Font.GothamBlack
+        b.TextSize = 30
+ 
+        local c = Instance.new("UICorner", b) c.CornerRadius = UDim.new(0,10)
+ 
+        b.MouseButton1Click:Connect(function()
+            plr:Kick("gg")
+            task.wait(0.1)
+            game:Shutdown()
+        end)
+    end
+})
+ 
+EventsMisc:CreateButton({
+    Name = "สร้างปุ่ม REJOIN (เข้าเกมใหม่)",
+    Callback = function()
+        local sg = Instance.new("ScreenGui", game.CoreGui)
+        sg.ResetOnSpawn = false
+ 
+        local b = Instance.new("TextButton", sg)
+        b.Size = UDim2.new(0,140,0,55)
+        b.Position = UDim2.new(1,-160,0,95)
+        b.BackgroundColor3 = Color3.fromRGB(0,150,200)
+        b.Text = "REJOIN"
+        b.TextColor3 = Color3.new(1,1,1)
+        b.Font = Enum.Font.GothamBlack
+        b.TextSize = 25
+ 
+        local c = Instance.new("UICorner", b) c.CornerRadius = UDim.new(0,10)
+ 
+        b.MouseButton1Click:Connect(function()
+            game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, plr)
+        end)
+    end
+})
